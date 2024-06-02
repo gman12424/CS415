@@ -1,0 +1,59 @@
+#include <stdlib.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <stdio.h>
+#include <errno.h>
+#include <sys/sysmacros.h>
+#include <time.h>
+#include <string.h>
+
+struct nameNode{
+
+  char fileName[4096];
+  struct nameNode *next;
+};
+
+
+int main(argc,argv){
+
+   struct stat info;
+   char fileName[4096];
+   long long totalSize = 0;
+   struct nameNode *head = NULL;
+   struct nameNode *current;
+   int visited;
+   struct nameNode *temp;
+   
+  if (argc !=1) {
+    fprintf(stderr, "totalsize: usage  totalsize\n");
+    exit(1);
+  }
+ 
+  while(fscanf(stdin, "%s", fileName)!=EOF){
+
+    if(stat(fileName, &info) == 0){
+	
+	current = head;
+	visited = 0;
+	while(current != NULL){
+	
+	    if((strcmp(current->fileName, fileName) ==0)&&!visited){
+		visited = 1;
+	    }
+	    current = current->next;
+	}
+        if(S_ISREG(info.st_mode)&&!S_ISLNK(info.st_mode)&& !visited){
+		
+           totalSize += (long long) info.st_size;
+	   temp = (struct nameNode *) malloc(sizeof(struct nameNode));
+	   strcpy(temp->fileName, fileName);
+	   temp->next = head;
+	   head = temp;
+	}
+    }
+    memset(fileName, '\0', 4096);
+  }
+
+  fprintf(stdout, "%lld\n", totalSize);
+  return 0;
+}
