@@ -1,0 +1,182 @@
+#!/bin/sh
+
+function dump {
+
+	echo "$MIN $MAX $STEP" >> beetle.state
+#	echo "Trying to finish"
+	echo "$NUM" >> beetle.state
+	echo "$PLOTFILE" >> beetle.state
+	awk  '{print $0}' "$tmpfile" >> beetle.state
+	rm "$tmpfile"
+	rm "$tmpfile2"
+	exit 0
+
+
+}
+
+function scan {
+	:
+#	echo $(eval "awk '{if (NR==1) {print \$1}}' $STATEFILE")
+#	echo $(eval "awk '{if (NR==1) {print \$2}}' $STATEFILE")
+#	echo $(eval "awk '{if (NR==1) {print \$3}}' $STATEFILE")
+#	echo $(eval "awk '{if (NR==2) {print \$1}}' $STATEFILE")
+#	echo $(eval "awk '{if (NR==3 && NF>0) {print \$1}}' $STATEFILE")
+	
+	MIN=$(eval "awk '{if (NR==1) {print \$1}}' $STATEFILE")
+	MAX=$(eval "awk '{if (NR==1) {print \$2}}' $STATEFILE")
+	STEP=$(eval "awk '{if (NR==1) {print \$3}}' $STATEFILE")
+	NUM=$(eval "awk '{if (NR==2) {print \$1}}' $STATEFILE")
+	PLOTFILE=$(eval "awk '{if (NR==3 && NF>0) {print \$1}}' $STATEFILE")
+	awk '{if (NR>3) {print $0}}' $STATEFILE >> "$tmpfile"
+}
+
+if [  $# -lt 2 ] 
+then
+	echo "Too few Parametars. Usage $0 -n num -i min max step [-p filename] [-r filename]"
+
+	exit 2
+fi
+
+tmpfile=$(mktemp /tmp/boiler.XXXXXX)
+tmpfile2=$(mktemp /tmp/boiler.XXXXXX)
+re='^[0-9]+$'
+while [ "$1" != '' ]
+do
+	key="$1"
+
+	case $key in
+
+		-n)
+		NUM="$2"
+		if ! [[ $NUM =~ $re ]]; then
+			echo "error: $NUM not a number"
+			exit 2
+			tmpfile=$(mktemp /tmp/boiler.XXXXXX)
+			tmpfile2=$(mktemp /tmp/boiler.XXXXXX)
+			
+		fi
+		shift
+	#	echo "-n found"
+		;;
+		-i) 
+		MIN="$2"
+		if ! [[ $MIN =~ $re ]]; then
+			echo "error: $MIN not a number"
+			exit 2
+			tmpfile=$(mktemp /tmp/boiler.XXXXXX)
+			tmpfile2=$(mktemp /tmp/boiler.XXXXXX)
+			
+		fi
+		
+		MAX="$3"
+		if ! [[ $MAX =~ $re ]]; then
+			echo "error: $MAX not a number"
+			exit 2
+			tmpfile=$(mktemp /tmp/boiler.XXXXXX)
+			tmpfile2=$(mktemp /tmp/boiler.XXXXXX)
+
+		fi
+
+		STEP="$4"
+		if ! [[ $MAX =~ $re ]]; then
+			echo "error: $MAX not a number"
+			exit 2
+			tmpfile=$(mktemp /tmp/boiler.XXXXXX)
+			tmpfile2=$(mktemp /tmp/boiler.XXXXXX)
+
+		fi
+
+		shift
+		shift
+		shift
+	#	echo "-i found"
+		;;
+		-p)
+		PLOTFILE="$2"
+		shift
+		;;
+		-r)
+		STATEFILE="$2"
+		if ! [[ -e $STATEFILE ]]
+		then
+			echo "$STATEFILE does not exist"
+			exit 2
+			tmpfile=$(mktemp /tmp/boiler.XXXXXX)
+			tmpfile2=$(mktemp /tmp/boiler.XXXXXX)
+
+		fi
+		shift
+		scan
+		break
+		;;
+		*) 
+		rm "$tmpfile"
+		rm "$tmpfile2"
+		echo "$1 unknown argument"
+		exit 2
+		;;
+
+	esac
+	shift
+done
+
+
+
+if [[ -v NUM ]] && [[ -v MIN ]];
+then
+	:
+#	echo ""
+else
+	echo "Usage boiler -n num -i min max step [-p filename] [-r filename]"
+	exit 2
+fi
+
+
+
+
+trap 'rm "$tmpfile"; rm "$tmpfile2"; exit 0' SIGINT
+trap 'echo $MIN' SIGUSR1
+trap dump SIGUSR2
+
+
+COMMAND="/home/f85/kearns/public/415/p6/beetle $MIN $NUM >> $tmpfile"
+
+OUTPUT=$(eval $COMMAND)
+#echo "step: $MIN $MAX"
+
+MIN=`expr $MIN + $STEP`
+
+
+while [[ "$MIN" -le "$MAX" ]]
+do
+	COMMAND="/home/f85/kearns/public/415/p6/beetle $MIN $NUM >> $tmpfile "
+#	echo "step: $MIN $MAX"
+	OUTPUT=$(eval $COMMAND ) &
+#	OUTPUT=$(eval $COMMAND )
+	PID="$!"
+#	echo $$
+	while  ps -p $PID --format pid= > /dev/null 
+	do
+#		echo "$$"
+		:
+
+	done
+	MIN=`expr $MIN + $STEP`
+done
+ 
+awk  '{print $1, " ",  $NF}' "$tmpfile" >> "$tmpfile2"
+awk '{print $1, " ", $NF}' "$tmpfile2"
+if [[ -v PLOTFILE ]] &&  [[ ! -z "$PLOTFILE" ]]
+then
+	gnuplot <<-EOF
+	set xlabel "Square Side (inches)"
+	set ylabel "Mean Beetle Lifetime (seconds)"
+	set term png
+	set autoscale
+	set output "${PLOTFILE}"
+	plot "${tmpfile2}" using 1:2 notitle
+	EOF
+fi
+
+rm "$tmpfile"
+rm "$tmpfile2"
